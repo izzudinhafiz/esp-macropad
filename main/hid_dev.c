@@ -12,133 +12,200 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//Section is about logic of preparing input reports
+// Section is about logic of preparing input reports
 
 #include "hid_dev.h"
-#include <stdint.h>
-#include <string.h>
+
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
+#include <string.h>
+
 #include "esp_log.h"
 
-static hid_report_map_t *hid_dev_rpt_tbl;
+static hid_report_map_t* hid_dev_rpt_tbl;
 static uint8_t hid_dev_rpt_tbl_Len;
 
-static hid_report_map_t *hid_dev_rpt_by_id(uint8_t id, uint8_t type)
-{
-    hid_report_map_t *rpt = hid_dev_rpt_tbl;
+static hid_report_map_t* hid_get_report_by_id(uint8_t id, uint8_t type) {
+  hid_report_map_t* rpt = hid_dev_rpt_tbl;
 
-    for (uint8_t i = hid_dev_rpt_tbl_Len; i > 0; i--, rpt++)
-    {
-        if (rpt->id == id && rpt->type == type && rpt->mode == hidProtocolMode)
-        {
-            return rpt;
-        }
+  for (uint8_t i = hid_dev_rpt_tbl_Len; i > 0; i--, rpt++) {
+    if (rpt->id == id && rpt->type == type && rpt->mode == hidProtocolMode) {
+      return rpt;
     }
+  }
 
-    return NULL;
+  return NULL;
 }
 
-void hid_dev_register_reports(uint8_t num_reports, hid_report_map_t *p_report)
-{
-    hid_dev_rpt_tbl = p_report;
-    hid_dev_rpt_tbl_Len = num_reports;
-    return;
+void hid_dev_register_reports(uint8_t num_reports, hid_report_map_t* p_report) {
+  hid_dev_rpt_tbl = p_report;
+  hid_dev_rpt_tbl_Len = num_reports;
+  return;
 }
 
-void hid_dev_send_report(esp_gatt_if_t gatts_if, uint16_t conn_id,
-                         uint8_t id, uint8_t type, uint8_t length, uint8_t *data)
-{
-    hid_report_map_t *p_rpt;
+void hid_dev_send_report(esp_gatt_if_t gatts_if, uint16_t conn_id, uint8_t id, uint8_t type, uint8_t length,
+                         uint8_t* data) {
+  hid_report_map_t* report;
+  report = hid_get_report_by_id(id, type);
+  // get att handle for report
+  if (report != NULL) {
+    // if notifications are enabled
+    ESP_LOGD(HID_LE_PRF_TAG, "%s(), send the report, handle = %d", __func__, report->handle);
+    esp_ble_gatts_send_indicate(gatts_if, conn_id, report->handle, length, data, false);
+  }
 
-    // get att handle for report
-    if ((p_rpt = hid_dev_rpt_by_id(id, type)) != NULL)
-    {
-        // if notifications are enabled
-        ESP_LOGD(HID_LE_PRF_TAG, "%s(), send the report, handle = %d", __func__, p_rpt->handle);
-        esp_ble_gatts_send_indicate(gatts_if, conn_id, p_rpt->handle, length, data, false);
-    }
-
-    return;
+  return;
 }
 
-void hid_consumer_build_report(uint8_t *buffer, consumer_cmd_t cmd)
-{
-    if (!buffer)
-    {
-        ESP_LOGE(HID_LE_PRF_TAG, "%s(), the buffer is NULL, hid build report failed.", __func__);
-        return;
-    }
-
-    switch (cmd)
-    {
-    case HID_CONSUMER_CHANNEL_UP:
+void hid_consumer_build_report(uint8_t* buffer, consumer_cmd cmd) {
+  if (buffer) {
+    switch (cmd) {
+      case HID_CONSUMER_CHANNEL_UP:
         HID_CC_RPT_SET_CHANNEL(buffer, HID_CC_RPT_CHANNEL_UP);
         break;
 
-    case HID_CONSUMER_CHANNEL_DOWN:
+      case HID_CONSUMER_CHANNEL_DOWN:
         HID_CC_RPT_SET_CHANNEL(buffer, HID_CC_RPT_CHANNEL_DOWN);
         break;
 
-    case HID_CONSUMER_VOLUME_UP:
+      case HID_CONSUMER_VOLUME_UP:
         HID_CC_RPT_SET_VOLUME_UP(buffer);
         break;
 
-    case HID_CONSUMER_VOLUME_DOWN:
+      case HID_CONSUMER_VOLUME_DOWN:
         HID_CC_RPT_SET_VOLUME_DOWN(buffer);
         break;
 
-    case HID_CONSUMER_MUTE:
+      case HID_CONSUMER_MUTE:
         HID_CC_RPT_SET_BUTTON(buffer, HID_CC_RPT_MUTE);
         break;
 
-    case HID_CONSUMER_POWER:
+      case HID_CONSUMER_POWER:
         HID_CC_RPT_SET_BUTTON(buffer, HID_CC_RPT_POWER);
         break;
 
-    case HID_CONSUMER_RECALL_LAST:
+      case HID_CONSUMER_RECALL_LAST:
         HID_CC_RPT_SET_BUTTON(buffer, HID_CC_RPT_LAST);
         break;
 
-    case HID_CONSUMER_ASSIGN_SEL:
+      case HID_CONSUMER_ASSIGN_SEL:
         HID_CC_RPT_SET_BUTTON(buffer, HID_CC_RPT_ASSIGN_SEL);
         break;
 
-    case HID_CONSUMER_PLAY:
+      case HID_CONSUMER_PLAY:
         HID_CC_RPT_SET_BUTTON(buffer, HID_CC_RPT_PLAY);
         break;
 
-    case HID_CONSUMER_PAUSE:
+      case HID_CONSUMER_PAUSE:
         HID_CC_RPT_SET_BUTTON(buffer, HID_CC_RPT_PAUSE);
         break;
 
-    case HID_CONSUMER_RECORD:
+      case HID_CONSUMER_RECORD:
         HID_CC_RPT_SET_BUTTON(buffer, HID_CC_RPT_RECORD);
         break;
 
-    case HID_CONSUMER_FAST_FORWARD:
+      case HID_CONSUMER_FAST_FORWARD:
         HID_CC_RPT_SET_BUTTON(buffer, HID_CC_RPT_FAST_FWD);
         break;
 
-    case HID_CONSUMER_REWIND:
+      case HID_CONSUMER_REWIND:
         HID_CC_RPT_SET_BUTTON(buffer, HID_CC_RPT_REWIND);
         break;
 
-    case HID_CONSUMER_SCAN_NEXT_TRK:
+      case HID_CONSUMER_SCAN_NEXT_TRK:
         HID_CC_RPT_SET_BUTTON(buffer, HID_CC_RPT_SCAN_NEXT_TRK);
         break;
 
-    case HID_CONSUMER_SCAN_PREV_TRK:
+      case HID_CONSUMER_SCAN_PREV_TRK:
         HID_CC_RPT_SET_BUTTON(buffer, HID_CC_RPT_SCAN_PREV_TRK);
         break;
 
-    case HID_CONSUMER_STOP:
+      case HID_CONSUMER_STOP:
         HID_CC_RPT_SET_BUTTON(buffer, HID_CC_RPT_STOP);
         break;
 
-    default:
+      default:
         break;
     }
+  }
+}
 
+void hid_send_consumer_value(uint16_t conn_id, uint8_t key_cmd, bool key_pressed) {
+  uint8_t buffer[HID_CC_IN_RPT_LEN] = {0, 0};
+  if (key_pressed) {
+    hid_consumer_build_report(buffer, key_cmd);
+  }
+  hid_dev_send_report(hid_connection.gatt_if, conn_id, HID_RPT_ID_CC_IN, HID_REPORT_TYPE_INPUT, HID_CC_IN_RPT_LEN,
+                      buffer);
+  return;
+}
+
+void hid_send_keyboard_value(uint16_t conn_id, key_mask special_key_mask, keyboard_cmd* keyboard_cmd, uint8_t num_key) {
+  if (num_key > HID_KEYBOARD_IN_RPT_LEN - 2) {
+    ESP_LOGE(HID_LE_PRF_TAG, "%s(), the number key should not be more than %d", __func__, HID_KEYBOARD_IN_RPT_LEN);
     return;
+  }
+
+  uint8_t buffer[HID_KEYBOARD_IN_RPT_LEN] = {0};
+
+  buffer[0] = special_key_mask;
+
+  for (int i = 0; i < num_key; i++) {
+    buffer[i + 2] = keyboard_cmd[i];
+  }
+
+  ESP_LOGD(HID_LE_PRF_TAG, "the key vaule = %d,%d,%d, %d, %d, %d,%d, %d", buffer[0], buffer[1], buffer[2], buffer[3],
+           buffer[4], buffer[5], buffer[6], buffer[7]);
+  hid_dev_send_report(hid_connection.gatt_if, conn_id, HID_RPT_ID_KEY_IN, HID_REPORT_TYPE_INPUT,
+                      HID_KEYBOARD_IN_RPT_LEN, buffer);
+  return;
+}
+
+void hid_device_register_callbacks(esp_hidd_event_cb_t callbacks) {
+  if (callbacks != NULL)
+    hid_connection.hidd_cb = callbacks;
+  else
+    return;
+
+  esp_ble_gatts_register_callback(gatts_event_handler);
+  esp_ble_gatts_app_register(BATTRAY_APP_ID);
+  esp_ble_gatts_app_register(HIDD_APP_ID);
+}
+
+void hid_device_profile_init(void) {
+  if (hid_connection.enabled) return;
+
+  // Reset the hid device target environment
+  memset(&hid_connection, 0, sizeof(hidd_le_env_t));
+  hid_connection.enabled = true;
+}
+
+void hid_device_profile_deinit(void) {
+  uint16_t hidd_svc_hdl = hid_connection.hidd_inst.att_tbl[HIDD_LE_IDX_SVC];
+  if (!hid_connection.enabled) return;
+
+  if (hidd_svc_hdl != 0) {
+    esp_ble_gatts_stop_service(hidd_svc_hdl);
+    esp_ble_gatts_delete_service(hidd_svc_hdl);
+  } else
+    return;
+
+  /* unregister the HID device profile to the BTA_GATTS module*/
+  esp_ble_gatts_app_unregister(hid_connection.gatt_if);
+}
+
+// TODO: possible deprecate
+void hid_send_mouse_value(uint16_t conn_id, uint8_t mouse_button, int8_t mickeys_x, int8_t mickeys_y) {
+  uint8_t buffer[HID_MOUSE_IN_RPT_LEN];
+
+  buffer[0] = mouse_button;  // Buttons
+  buffer[1] = mickeys_x;     // X
+  buffer[2] = mickeys_y;     // Y
+  buffer[3] = 0;             // Wheel
+  buffer[4] = 0;             // AC Pan
+
+  hid_dev_send_report(hid_connection.gatt_if, conn_id, HID_RPT_ID_MOUSE_IN, HID_REPORT_TYPE_INPUT, HID_MOUSE_IN_RPT_LEN,
+                      buffer);
+  return;
 }

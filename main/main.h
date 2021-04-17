@@ -268,14 +268,11 @@ void initBT(void)
 void initHID(void)
 {
 	esp_err_t ret;
-	if ((ret = esp_hidd_profile_init()) != ESP_OK)
-	{
-		ESP_LOGE(HID_DEMO_TAG, "%s init HID Device profile failed\n", __func__);
-	}
+	hid_device_profile_init();
 
 	///register the callback function to the gap module
 	esp_ble_gap_register_callback(gap_event_handler);
-	esp_hidd_register_callbacks(hidd_event_callback);
+	hid_device_register_callbacks(hidd_event_callback);
 
 	/* set the security iocap & auth_req & key size & init key response key parameters to the stack*/
 	esp_ble_auth_req_t auth_req = ESP_LE_AUTH_BOND; //bonding with peer device after authentication
