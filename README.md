@@ -1,34 +1,17 @@
 | Supported Targets | ESP32 |
 | ----------------- | ----- |
 
-ESP-IDF BLE HID device demo
+#Custom BLE Capable HID Macropad
+Code heavily modified from ESP-IDF BLE HID Device Demo
+
+Introduction
 ========================
-This example Implemented BLE HID device profile related functions, in which the HID device has 
-4 Reports (1 is mouse, 2 is keyboard and LED, 3 is Consumer Devices, 4 is Vendor devices). 
-Users can choose different reports according to their own application scenarios.
-BLE HID profile inheritance and USB HID class. 
+Implementation of BLE HID profile for a keyboard and consumer device. Possible addition of a BLE SPP. 
 
-ble_hidd_demo_main.c
-==========================
-This file is the demo to show how to used the HID(you can used it to connected to the smart phone act as the consumer device then can used the button to 
-volume++ or volume-- etc., or connected to the Windows 10 PC act as a keyboard or mouse)
+This macropad implements a ESP32 as a BLE capable HID interface that is connected to a 3x3 keyboard matrix and a rotary encoder. 
 
-hidd_le_prf_int.h
-==========================
-This header file includes some HID profile related definitions.
+An ATmega16U2 is also implemented as a USB controller for when the device is connected through USB. This allow dual operation mode, BLE + Battery wireless mode and a tethered USB + Rail power mode.
 
-esp_hidd_prf_api.h & esp_hidd_prf_api.c
-===========================================
-These files contains the the api of the HID profile
+This codebase heavily modifies the demo code provided by Espressif in their BLE HID Device Demo. The modification covers code refactoring to be more descriptive of the functions and attributes. Also, simplified the various different source files and header files to reduce cross-reference (my god was this a headache).
 
-When you used the HID profile, you just need to added the esp_hidd_prf_api.h includes file and send the HID data used the function defined in the esp_hidd_prf_api.c file.
-
-hid_dev.h & hid_dev.c
-======================
-These file define the HID spec related definitions
-
-hid_device_le_prf.c
-======================
-This file is the HID profile definition file, it include the main function of the HID profile. 
-It mainly includes how to create HID service. If you send and receive HID data and convert the data to keyboard keys, 
-the mouse and consumer values are forwarded to the application.
+The main.c contains core hardware control, while the hid_dev.c contains the core HID interfacing. hid_device_le_prf.c (that name will be changed) contains the lower level HID profile and descriptors.
