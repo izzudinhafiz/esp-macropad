@@ -5,6 +5,7 @@
 #include "esp_gap_ble_api.h"
 #include "esp_gatt_defs.h"
 #include "esp_gatts_api.h"
+#include "esp_log.h"
 #include "hid_dev.h"
 
 #define HID_DEMO_TAG "HID_DEMO"
@@ -15,7 +16,7 @@ static uint16_t hid_conn_id = 0;
 static bool sec_conn = false;
 static uint16_t buttonToggleMask = 0;
 static uint16_t last_counter = 0;
-static void hidd_event_callback(esp_hidd_cb_event_t event, esp_hidd_cb_param_t* param);
+static void hidd_event_callback(HIDEvent event, HIDCallbackParameters* param);
 
 static uint8_t hidd_service_uuid128[] = {
     /* LSB <--------------------------------------------------------------------------------> MSB */
@@ -50,7 +51,7 @@ static esp_ble_adv_params_t hidd_adv_params = {
     .adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY,
 };
 
-static void hidd_event_callback(esp_hidd_cb_event_t event, esp_hidd_cb_param_t* param) {
+static void hidd_event_callback(HIDEvent event, HIDCallbackParameters* param) {
   switch (event) {
     case ESP_HIDD_EVENT_REG_FINISH: {
       if (param->init_finish.state == ESP_HIDD_INIT_OK) {

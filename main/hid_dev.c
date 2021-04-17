@@ -23,11 +23,11 @@
 
 #include "esp_log.h"
 
-static hid_report_map_t* hid_dev_rpt_tbl;
+static HIDReportMapping* hid_dev_rpt_tbl;
 static uint8_t hid_dev_rpt_tbl_Len;
 
-static hid_report_map_t* hid_get_report_by_id(uint8_t id, uint8_t type) {
-  hid_report_map_t* rpt = hid_dev_rpt_tbl;
+static HIDReportMapping* hid_get_report_by_id(uint8_t id, uint8_t type) {
+  HIDReportMapping* rpt = hid_dev_rpt_tbl;
 
   for (uint8_t i = hid_dev_rpt_tbl_Len; i > 0; i--, rpt++) {
     if (rpt->id == id && rpt->type == type && rpt->mode == hidProtocolMode) {
@@ -38,7 +38,7 @@ static hid_report_map_t* hid_get_report_by_id(uint8_t id, uint8_t type) {
   return NULL;
 }
 
-void hid_dev_register_reports(uint8_t num_reports, hid_report_map_t* p_report) {
+void hid_dev_register_reports(uint8_t num_reports, HIDReportMapping* p_report) {
   hid_dev_rpt_tbl = p_report;
   hid_dev_rpt_tbl_Len = num_reports;
   return;
@@ -46,7 +46,7 @@ void hid_dev_register_reports(uint8_t num_reports, hid_report_map_t* p_report) {
 
 void hid_dev_send_report(esp_gatt_if_t gatts_if, uint16_t conn_id, uint8_t id, uint8_t type, uint8_t length,
                          uint8_t* data) {
-  hid_report_map_t* report;
+  HIDReportMapping* report;
   report = hid_get_report_by_id(id, type);
   // get att handle for report
   if (report != NULL) {
@@ -136,8 +136,7 @@ void hid_send_consumer_value(uint16_t conn_id, uint8_t key_cmd, bool key_pressed
   if (key_pressed) {
     hid_consumer_build_report(buffer, key_cmd);
   }
-  hid_dev_send_report(hid_connection.gatt_if, conn_id, HID_RPT_ID_CC_IN, HID_REPORT_TYPE_INPUT, HID_CC_IN_RPT_LEN,
-                      buffer);
+  hid_dev_send_report(hid_engine.gatt_if, conn_id, HID_RPT_ID_CC_IN, HID_REPORT_TYPE_INPUT, HID_CC_IN_RPT_LEN, buffer);
   return;
 }
 
@@ -157,14 +156,14 @@ void hid_send_keyboard_value(uint16_t conn_id, key_mask special_key_mask, keyboa
 
   ESP_LOGD(HID_LE_PRF_TAG, "the key vaule = %d,%d,%d, %d, %d, %d,%d, %d", buffer[0], buffer[1], buffer[2], buffer[3],
            buffer[4], buffer[5], buffer[6], buffer[7]);
-  hid_dev_send_report(hid_connection.gatt_if, conn_id, HID_RPT_ID_KEY_IN, HID_REPORT_TYPE_INPUT,
-                      HID_KEYBOARD_IN_RPT_LEN, buffer);
+  hid_dev_send_report(hid_engine.gatt_if, conn_id, HID_RPT_ID_KEY_IN, HID_REPORT_TYPE_INPUT, HID_KEYBOARD_IN_RPT_LEN,
+                      buffer);
   return;
 }
 
-void hid_device_register_callbacks(esp_hidd_event_cb_t callbacks) {
+void hid_device_register_callbacks(HIDEventCallback callbacks) {
   if (callbacks != NULL)
-    hid_connection.hidd_cb = callbacks;
+    hid_engine.hidd_cb = callbacks;
   else
     return;
 
@@ -174,16 +173,16 @@ void hid_device_register_callbacks(esp_hidd_event_cb_t callbacks) {
 }
 
 void hid_device_profile_init(void) {
-  if (hid_connection.enabled) return;
+  if (hid_engine.enabled) return;
 
   // Reset the hid device target environment
-  memset(&hid_connection, 0, sizeof(hidd_le_env_t));
-  hid_connection.enabled = true;
+  memset(&hid_engine, 0, sizeof(HIDServiceEngine));
+  hid_engine.enabled = true;
 }
 
 void hid_device_profile_deinit(void) {
-  uint16_t hidd_svc_hdl = hid_connection.hidd_inst.att_tbl[HIDD_LE_IDX_SVC];
-  if (!hid_connection.enabled) return;
+  uint16_t hidd_svc_hdl = hid_engine.hidd_inst.att_tbl[HIDD_LE_IDX_SVC];
+  if (!hid_engine.enabled) return;
 
   if (hidd_svc_hdl != 0) {
     esp_ble_gatts_stop_service(hidd_svc_hdl);
@@ -192,7 +191,7 @@ void hid_device_profile_deinit(void) {
     return;
 
   /* unregister the HID device profile to the BTA_GATTS module*/
-  esp_ble_gatts_app_unregister(hid_connection.gatt_if);
+  esp_ble_gatts_app_unregister(hid_engine.gatt_if);
 }
 
 // TODO: possible deprecate
@@ -205,7 +204,7 @@ void hid_send_mouse_value(uint16_t conn_id, uint8_t mouse_button, int8_t mickeys
   buffer[3] = 0;             // Wheel
   buffer[4] = 0;             // AC Pan
 
-  hid_dev_send_report(hid_connection.gatt_if, conn_id, HID_RPT_ID_MOUSE_IN, HID_REPORT_TYPE_INPUT, HID_MOUSE_IN_RPT_LEN,
+  hid_dev_send_report(hid_engine.gatt_if, conn_id, HID_RPT_ID_MOUSE_IN, HID_REPORT_TYPE_INPUT, HID_MOUSE_IN_RPT_LEN,
                       buffer);
   return;
 }

@@ -14,12 +14,12 @@
 
 #ifndef __HID_DEVICE_LE_PRF__
 #define __HID_DEVICE_LE_PRF__
+
 #include <stdbool.h>
 
 #include "esp_gap_ble_api.h"
 #include "esp_gatt_defs.h"
 #include "esp_gatts_api.h"
-#include "hid_dev.h"
 #include "uuid_definition.h"
 
 #define HID_LE_PRF_TAG "HID_LE_PRF"
@@ -80,6 +80,45 @@
 #define HID_REPORT_TYPE_INPUT 1
 #define HID_REPORT_TYPE_OUTPUT 2
 #define HID_REPORT_TYPE_FEATURE 3
+
+/* HID Report type */
+#define HID_TYPE_INPUT 1
+#define HID_TYPE_OUTPUT 2
+#define HID_TYPE_FEATURE 3
+
+#define HID_KEYBOARD_IN_RPT_LEN 8  // HID keyboard input report length
+#define HID_LED_OUT_RPT_LEN 1      // HID LED output report length
+#define HID_MOUSE_IN_RPT_LEN 5     // HID mouse input report length
+#define HID_CC_IN_RPT_LEN 2        // HID consumer control input report length
+
+#define LEFT_CONTROL_KEY_MASK (1 << 0)
+#define LEFT_SHIFT_KEY_MASK (1 << 1)
+#define LEFT_ALT_KEY_MASK (1 << 2)
+#define LEFT_GUI_KEY_MASK (1 << 3)
+#define RIGHT_CONTROL_KEY_MASK (1 << 4)
+#define RIGHT_SHIFT_KEY_MASK (1 << 5)
+#define RIGHT_ALT_KEY_MASK (1 << 6)
+#define RIGHT_GUI_KEY_MASK (1 << 7)
+
+// Macros for the HID Consumer Control 2-byte report
+#define HID_CC_RPT_SET_SELECTION(s, x) \
+  (s)[1] &= HID_CC_RPT_SELECTION_BITS; \
+  (s)[1] |= ((x)&0x03) << 4
+#define HID_CC_RPT_SET_BUTTON(s, x) \
+  (s)[1] &= HID_CC_RPT_BUTTON_BITS; \
+  (s)[1] |= (x)
+#define HID_CC_RPT_SET_NUMERIC(s, x) \
+  (s)[0] &= HID_CC_RPT_NUMERIC_BITS; \
+  (s)[0] = (x)
+#define HID_CC_RPT_SET_CHANNEL(s, x) \
+  (s)[0] &= HID_CC_RPT_CHANNEL_BITS; \
+  (s)[0] |= ((x)&0x03) << 4
+#define HID_CC_RPT_SET_VOLUME_UP(s) \
+  (s)[0] &= HID_CC_RPT_VOLUME_BITS; \
+  (s)[0] |= 0x40
+#define HID_CC_RPT_SET_VOLUME_DOWN(s) \
+  (s)[0] &= HID_CC_RPT_VOLUME_BITS;   \
+  (s)[0] |= 0x80
 
 /// Pointer to the connection clean-up function
 #define HIDD_LE_CLEANUP_FNCT (NULL)
@@ -173,17 +212,95 @@ enum ReportCharacteristicConfigFlag {
   HIDD_LE_CFG_REPORT_WR = 0x10,
 };
 
-/// HIDD Features structure
-typedef struct {
+typedef uint8_t key_mask;
+
+typedef uint8_t keyboard_cmd;
+
+typedef uint8_t consumer_cmd;
+
+typedef enum HIDEvent {
+  ESP_HIDD_EVENT_REG_FINISH = 0,
+  ESP_BAT_EVENT_REG,
+  ESP_HIDD_EVENT_DEINIT_FINISH,
+  ESP_HIDD_EVENT_BLE_CONNECT,
+  ESP_HIDD_EVENT_BLE_DISCONNECT,
+  ESP_HIDD_EVENT_BLE_VENDOR_REPORT_WRITE_EVT,
+} HIDEvent;
+
+typedef enum HIDConnectionStatus {
+  ESP_HIDD_STA_CONN_SUCCESS = 0x00,
+  ESP_HIDD_STA_CONN_FAIL = 0x01,
+} HIDConnectionStatus;
+
+typedef enum HIDInitStatus {
+  ESP_HIDD_INIT_OK = 0,
+  ESP_HIDD_INIT_FAILED = 1,
+} HIDInitStatus;
+
+typedef enum HIDDeInitStatus {
+  ESP_HIDD_DEINIT_OK = 0,
+  ESP_HIDD_DEINIT_FAILED = 0,
+} HIDDeInitStatus;
+
+typedef union HIDCallbackParameters {
+  struct HIDInitFinishEvent {
+    // ESP_HIDD_EVENT_INIT_FINISH
+    HIDInitStatus state;
+    esp_gatt_if_t gatts_if;
+  } init_finish;
+
+  struct HIDDeInitFinishEvent {
+    // ESP_HIDD_EVENT_DEINIT_FINISH
+    HIDDeInitStatus state;
+  } deinit_finish;
+
+  struct HIDConnectEvent {
+    // ESP_HIDD_EVENT_CONNECT
+    uint16_t conn_id;
+    esp_bd_addr_t remote_bda;
+  } connect;
+
+  struct HIDDisconnectEvent {
+    // ESP_HIDD_EVENT_DISCONNECT
+    esp_bd_addr_t remote_bda;
+  } disconnect;
+
+  struct HIDVendorWriteEvent {
+    // ESP_HIDD_EVENT_BLE_VENDOR_REPORT_WRITE_EVT
+    uint16_t conn_id;
+    uint16_t report_id;
+    uint16_t length;
+    uint8_t* data;
+  } vendor_write;
+
+} HIDCallbackParameters;
+
+typedef void (*HIDEventCallback)(HIDEvent event, HIDCallbackParameters* param);
+
+typedef struct HIDReportMapping {
+  uint16_t handle;      // Handle of report characteristic
+  uint16_t cccdHandle;  // Handle of CCCD for report characteristic
+  uint8_t id;           // Report ID
+  uint8_t type;         // Report type
+  uint8_t mode;         // Protocol mode (report or boot)
+} HIDReportMapping;
+
+typedef struct HIDDeviceConfiguration {
+  uint32_t idleTimeout;  // Idle timeout in milliseconds
+  uint8_t hidFlags;      // HID feature flags
+
+} HIDDeviceConfiguration;
+
+typedef struct HIDFeatures {
   /// Service Features
   uint8_t svc_features;
   /// Number of Report Char. instances to add in the database
   uint8_t report_nb;
   /// Report Char. Configuration
   uint8_t report_char_cfg[HIDD_LE_NB_REPORT_INST_MAX];
-} hidd_feature_t;
+} HIDFeatures;
 
-typedef struct {
+typedef struct HIDConnectionLink {
   bool in_use;
   bool congest;
   uint16_t conn_id;
@@ -192,18 +309,9 @@ typedef struct {
   uint32_t trans_id;
   uint8_t cur_srvc_id;
 
-} hidd_clcb_t;
+} HIDConnectionLink;
 
-// HID report mapping table
-typedef struct {
-  uint16_t handle;      // Handle of report characteristic
-  uint16_t cccdHandle;  // Handle of CCCD for report characteristic
-  uint8_t id;           // Report ID
-  uint8_t type;         // Report type
-  uint8_t mode;         // Protocol mode (report or boot)
-} hidRptMap_t;
-
-typedef struct {
+typedef struct HIDInstance {
   /// hidd profile id
   uint8_t app_id;
   /// Notified handle
@@ -211,41 +319,33 @@ typedef struct {
   /// Attribute handle Table
   uint16_t att_tbl[HIDD_LE_IDX_NB];
   /// Supported Features
-  hidd_feature_t hidd_feature[HIDD_LE_NB_HIDS_INST_MAX];
+  HIDFeatures hidd_feature[HIDD_LE_NB_HIDS_INST_MAX];
   /// Current Protocol Mode
   uint8_t proto_mode[HIDD_LE_NB_HIDS_INST_MAX];
   /// Number of HIDS added in the database
   uint8_t hids_nb;
   uint8_t pending_evt;
   uint16_t pending_hal;
-} hidd_inst_t;
+} HIDInstance;
 
-/// Report Reference structure
-typedef struct {
-  uint8_t report_id;
-  uint8_t report_type;
-} hids_report_ref_t;
-
-/// HID Information structure
-typedef struct {
+typedef struct HIDInformation {
   uint16_t bcdHID;
   uint8_t bCountryCode;
   uint8_t flags;
-} hids_hid_info_t;
+} HIDInformation;
 
-/* service engine control block */
-typedef struct {
-  hidd_clcb_t hidd_clcb[HID_MAX_APPS]; /* connection link*/
+typedef struct HIDServiceEngine {
+  HIDConnectionLink hidd_clcb[HID_MAX_APPS]; /* connection link*/
   esp_gatt_if_t gatt_if;
   bool enabled;
   bool is_take;
   bool is_primery;
-  hidd_inst_t hidd_inst;
-  esp_hidd_event_cb_t hidd_cb;
+  HIDInstance hidd_inst;
+  HIDEventCallback hidd_cb;
   uint8_t inst_id;
-} hidd_le_env_t;
+} HIDServiceEngine;
 
-extern hidd_le_env_t hid_connection;
+extern HIDServiceEngine hid_engine;
 extern uint8_t hidProtocolMode;
 
 void hidd_clcb_alloc(uint16_t conn_id, esp_bd_addr_t bda);
@@ -256,6 +356,8 @@ void hidd_set_attr_value(uint16_t handle, uint16_t val_len, const uint8_t* value
 
 void hidd_get_attr_value(uint16_t handle, uint16_t* length, uint8_t** value);
 
-static void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t* param);
+void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t* param);
 
-#endif  ///__HID_DEVICE_LE_PRF__
+void hid_dev_register_reports(uint8_t num_reports, HIDReportMapping* p_report);
+
+#endif
