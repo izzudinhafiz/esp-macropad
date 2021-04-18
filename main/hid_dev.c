@@ -23,6 +23,8 @@
 
 #include "esp_log.h"
 
+#define HIDD_TAG "HID_DEVICE"
+
 static HIDReportMapping* hid_dev_rpt_tbl;
 static uint8_t hid_dev_rpt_tbl_Len;
 
@@ -51,7 +53,7 @@ void hid_dev_send_report(esp_gatt_if_t gatts_if, uint16_t conn_id, uint8_t id, u
   // get att handle for report
   if (report != NULL) {
     // if notifications are enabled
-    ESP_LOGD(HID_LE_PRF_TAG, "%s(), send the report, handle = %d", __func__, report->handle);
+    ESP_LOGD(HIDD_TAG, "%s(), send the report, handle = %d", __func__, report->handle);
     esp_ble_gatts_send_indicate(gatts_if, conn_id, report->handle, length, data, false);
   }
 
@@ -142,7 +144,7 @@ void hid_send_consumer_value(uint16_t conn_id, uint8_t key_cmd, bool key_pressed
 
 void hid_send_keyboard_value(uint16_t conn_id, key_mask special_key_mask, keyboard_cmd* keyboard_cmd, uint8_t num_key) {
   if (num_key > HID_KEYBOARD_IN_RPT_LEN - 2) {
-    ESP_LOGE(HID_LE_PRF_TAG, "%s(), the number key should not be more than %d", __func__, HID_KEYBOARD_IN_RPT_LEN);
+    ESP_LOGE(HIDD_TAG, "%s(), the number key should not be more than %d", __func__, HID_KEYBOARD_IN_RPT_LEN);
     return;
   }
 
@@ -154,22 +156,11 @@ void hid_send_keyboard_value(uint16_t conn_id, key_mask special_key_mask, keyboa
     buffer[i + 2] = keyboard_cmd[i];
   }
 
-  ESP_LOGD(HID_LE_PRF_TAG, "the key vaule = %d,%d,%d, %d, %d, %d,%d, %d", buffer[0], buffer[1], buffer[2], buffer[3],
+  ESP_LOGD(HIDD_TAG, "the key vaule = %d,%d,%d, %d, %d, %d,%d, %d", buffer[0], buffer[1], buffer[2], buffer[3],
            buffer[4], buffer[5], buffer[6], buffer[7]);
   hid_dev_send_report(hid_engine.gatt_if, conn_id, HID_RPT_ID_KEY_IN, HID_REPORT_TYPE_INPUT, HID_KEYBOARD_IN_RPT_LEN,
                       buffer);
   return;
-}
-
-void hid_device_register_callbacks(HIDEventCallback callbacks) {
-  if (callbacks != NULL)
-    hid_engine.hidd_cb = callbacks;
-  else
-    return;
-
-  esp_ble_gatts_register_callback(gatts_event_handler);
-  esp_ble_gatts_app_register(BATTRAY_APP_ID);
-  esp_ble_gatts_app_register(HIDD_APP_ID);
 }
 
 void hid_device_profile_init(void) {

@@ -1,207 +1,18 @@
-// Copyright 2017-2018 Espressif Systems (Shanghai) PTE LTD
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
-// This does HID Device Info Setups
+#include "ble_profile.h"
 
 #include <string.h>
 
 #include "esp_log.h"
-#include "hidd_le_prf_int.h"
+#include "hid_keydefinition.h"
 
-/// characteristic presentation information
+#define BLEPRF_TAG "BLE_PROFILE"
 struct CharacteristicPresentationInfo {
-  /// Unit (The Unit is a UUID)
-  uint16_t unit;
-  /// Description
+  uint16_t unit;  // Unit (The Unit is a UUID)
   uint16_t description;
-  /// Format
   uint8_t format;
-  /// Exponent
   uint8_t exponent;
-  /// Name space
   uint8_t name_space;
 };
-
-// HID report mapping table
-static HIDReportMapping hid_rpt_map[HID_NUM_REPORTS];
-
-// HID Report Map characteristic value
-// Keyboard report descriptor (using format for Boot interface descriptor)
-static const uint8_t hidReportMap[] = {
-    0x05, 0x01,  // Usage Page (Generic Desktop)
-    0x09, 0x02,  // Usage (Mouse)
-    0xA1, 0x01,  // Collection (Application)
-    0x85, 0x01,  // Report Id (1)
-    0x09, 0x01,  //   Usage (Pointer)
-    0xA1, 0x00,  //   Collection (Physical)
-    0x05, 0x09,  //     Usage Page (Buttons)
-    0x19, 0x01,  //     Usage Minimum (01) - Button 1
-    0x29, 0x03,  //     Usage Maximum (03) - Button 3
-    0x15, 0x00,  //     Logical Minimum (0)
-    0x25, 0x01,  //     Logical Maximum (1)
-    0x75, 0x01,  //     Report Size (1)
-    0x95, 0x03,  //     Report Count (3)
-    0x81, 0x02,  //     Input (Data, Variable, Absolute) - Button states
-    0x75, 0x05,  //     Report Size (5)
-    0x95, 0x01,  //     Report Count (1)
-    0x81, 0x01,  //     Input (Constant) - Padding or Reserved bits
-    0x05, 0x01,  //     Usage Page (Generic Desktop)
-    0x09, 0x30,  //     Usage (X)
-    0x09, 0x31,  //     Usage (Y)
-    0x09, 0x38,  //     Usage (Wheel)
-    0x15, 0x81,  //     Logical Minimum (-127)
-    0x25, 0x7F,  //     Logical Maximum (127)
-    0x75, 0x08,  //     Report Size (8)
-    0x95, 0x03,  //     Report Count (3)
-    0x81, 0x06,  //     Input (Data, Variable, Relative) - X & Y coordinate
-    0xC0,        //   End Collection
-    0xC0,        // End Collection
-
-    0x05, 0x01,  // Usage Pg (Generic Desktop)
-    0x09, 0x06,  // Usage (Keyboard)
-    0xA1, 0x01,  // Collection: (Application)
-    0x85, 0x02,  // Report Id (2)
-    //
-    0x05, 0x07,  //   Usage Pg (Key Codes)
-    0x19, 0xE0,  //   Usage Min (224)
-    0x29, 0xE7,  //   Usage Max (231)
-    0x15, 0x00,  //   Log Min (0)
-    0x25, 0x01,  //   Log Max (1)
-    //
-    //   Modifier byte
-    0x75, 0x01,  //   Report Size (1)
-    0x95, 0x08,  //   Report Count (8)
-    0x81, 0x02,  //   Input: (Data, Variable, Absolute)
-    //
-    //   Reserved byte
-    0x95, 0x01,  //   Report Count (1)
-    0x75, 0x08,  //   Report Size (8)
-    0x81, 0x01,  //   Input: (Constant)
-    //
-    //   LED report
-    0x95, 0x05,  //   Report Count (5)
-    0x75, 0x01,  //   Report Size (1)
-    0x05, 0x08,  //   Usage Pg (LEDs)
-    0x19, 0x01,  //   Usage Min (1)
-    0x29, 0x05,  //   Usage Max (5)
-    0x91, 0x02,  //   Output: (Data, Variable, Absolute)
-    //
-    //   LED report padding
-    0x95, 0x01,  //   Report Count (1)
-    0x75, 0x03,  //   Report Size (3)
-    0x91, 0x01,  //   Output: (Constant)
-    //
-    //   Key arrays (6 bytes)
-    0x95, 0x06,  //   Report Count (6)
-    0x75, 0x08,  //   Report Size (8)
-    0x15, 0x00,  //   Log Min (0)
-    0x25, 0x65,  //   Log Max (101)
-    0x05, 0x07,  //   Usage Pg (Key Codes)
-    0x19, 0x00,  //   Usage Min (0)
-    0x29, 0x65,  //   Usage Max (101)
-    0x81, 0x00,  //   Input: (Data, Array)
-    //
-    0xC0,  // End Collection
-    //
-    0x05, 0x0C,  // Usage Pg (Consumer Devices)
-    0x09, 0x01,  // Usage (Consumer Control)
-    0xA1, 0x01,  // Collection (Application)
-    0x85, 0x03,  // Report Id (3)
-    0x09, 0x02,  //   Usage (Numeric Key Pad)
-    0xA1, 0x02,  //   Collection (Logical)
-    0x05, 0x09,  //     Usage Pg (Button)
-    0x19, 0x01,  //     Usage Min (Button 1)
-    0x29, 0x0A,  //     Usage Max (Button 10)
-    0x15, 0x01,  //     Logical Min (1)
-    0x25, 0x0A,  //     Logical Max (10)
-    0x75, 0x04,  //     Report Size (4)
-    0x95, 0x01,  //     Report Count (1)
-    0x81, 0x00,  //     Input (Data, Ary, Abs)
-    0xC0,        //   End Collection
-    0x05, 0x0C,  //   Usage Pg (Consumer Devices)
-    0x09, 0x86,  //   Usage (Channel)
-    0x15, 0xFF,  //   Logical Min (-1)
-    0x25, 0x01,  //   Logical Max (1)
-    0x75, 0x02,  //   Report Size (2)
-    0x95, 0x01,  //   Report Count (1)
-    0x81, 0x46,  //   Input (Data, Var, Rel, Null)
-    0x09, 0xE9,  //   Usage (Volume Up)
-    0x09, 0xEA,  //   Usage (Volume Down)
-    0x15, 0x00,  //   Logical Min (0)
-    0x75, 0x01,  //   Report Size (1)
-    0x95, 0x02,  //   Report Count (2)
-    0x81, 0x02,  //   Input (Data, Var, Abs)
-    0x09, 0xE2,  //   Usage (Mute)
-    0x09, 0x30,  //   Usage (Power)
-    0x09, 0x83,  //   Usage (Recall Last)
-    0x09, 0x81,  //   Usage (Assign Selection)
-    0x09, 0xB0,  //   Usage (Play)
-    0x09, 0xB1,  //   Usage (Pause)
-    0x09, 0xB2,  //   Usage (Record)
-    0x09, 0xB3,  //   Usage (Fast Forward)
-    0x09, 0xB4,  //   Usage (Rewind)
-    0x09, 0xB5,  //   Usage (Scan Next)
-    0x09, 0xB6,  //   Usage (Scan Prev)
-    0x09, 0xB7,  //   Usage (Stop)
-    0x15, 0x01,  //   Logical Min (1)
-    0x25, 0x0C,  //   Logical Max (12)
-    0x75, 0x04,  //   Report Size (4)
-    0x95, 0x01,  //   Report Count (1)
-    0x81, 0x00,  //   Input (Data, Ary, Abs)
-    0x09, 0x80,  //   Usage (Selection)
-    0xA1, 0x02,  //   Collection (Logical)
-    0x05, 0x09,  //     Usage Pg (Button)
-    0x19, 0x01,  //     Usage Min (Button 1)
-    0x29, 0x03,  //     Usage Max (Button 3)
-    0x15, 0x01,  //     Logical Min (1)
-    0x25, 0x03,  //     Logical Max (3)
-    0x75, 0x02,  //     Report Size (2)
-    0x81, 0x00,  //     Input (Data, Ary, Abs)
-    0xC0,        //   End Collection
-    0x81, 0x03,  //   Input (Const, Var, Abs)
-    0xC0,        // End Collectionq
-
-#if (SUPPORT_REPORT_VENDOR == true)
-    0x06, 0xFF, 0xFF,  // Usage Page(Vendor defined)
-    0x09, 0xA5,        // Usage(Vendor Defined)
-    0xA1, 0x01,        // Collection(Application)
-    0x85, 0x04,        // Report Id (4)
-    0x09, 0xA6,        // Usage(Vendor defined)
-    0x09, 0xA9,        // Usage(Vendor defined)
-    0x75, 0x08,        // Report Size
-    0x95, 0x7F,        // Report Count = 127 Btyes
-    0x91, 0x02,        // Output(Data, Variable, Absolute)
-    0xC0,              // End Collection
-#endif
-
-};
-
-/// Battery Service Attributes Indexes
-enum BatteryServiceAttribute {
-  BAS_IDX_SVC,
-  BAS_IDX_BATT_LVL_CHAR,
-  BAS_IDX_BATT_LVL_VAL,
-  BAS_IDX_BATT_LVL_NTF_CFG,
-  BAS_IDX_BATT_LVL_PRES_FMT,
-  BAS_IDX_NB,
-};
-
-#define HI_UINT16(a) (((a) >> 8) & 0xFF)
-#define LO_UINT16(a) ((a)&0xFF)
-#define PROFILE_NUM 1
-#define PROFILE_APP_IDX 0
-#define CHAR_DECLARATION_SIZE (sizeof(uint8_t))
 
 struct GATTSProfileInstance {
   esp_gatts_cb_t gatts_cb;
@@ -210,14 +21,12 @@ struct GATTSProfileInstance {
   uint16_t conn_id;
 };
 
+// HID report mapping table
+static HIDReportMapping hid_rpt_map[HID_NUM_REPORTS];
 HIDServiceEngine hid_engine;
 
-// HID report map length
-uint8_t hidReportMapLen = sizeof(hidReportMap);
-uint8_t hidProtocolMode = HID_PROTOCOL_MODE_REPORT;
-
 // HID Information characteristic value
-static const uint8_t hidInfo[HID_INFORMATION_LEN] = {
+static const uint8_t hid_info_characteristic_value[HID_INFORMATION_LEN] = {
     LO_UINT16(0x0111), HI_UINT16(0x0111),  // bcdHID (USB HID version)
     0x00,                                  // bCountryCode
     HID_KBD_FLAGS                          // Flags
@@ -230,13 +39,11 @@ static uint8_t hidReportRefLedOut[HID_REPORT_REF_LEN] = {HID_RPT_ID_LED_OUT, HID
 static uint8_t hidReportRefFeature[HID_REPORT_REF_LEN] = {HID_RPT_ID_FEATURE, HID_REPORT_TYPE_FEATURE};
 static uint8_t hidReportRefCCIn[HID_REPORT_REF_LEN] = {HID_RPT_ID_CC_IN, HID_REPORT_TYPE_INPUT};
 
-/// hid Service uuid
-static uint16_t hid_le_svc = ATT_SVC_HID;
+static uint16_t hid_service_uuid = ATT_SVC_HID;
 uint16_t hid_count = 0;
 esp_gatts_incl_svc_desc_t incl_svc = {0};
 
-/// battary Service
-static const uint16_t battery_service = ESP_GATT_UUID_BATTERY_SERVICE_SVC;
+static const uint16_t battery_service_uuid = ESP_GATT_UUID_BATTERY_SERVICE_SVC;
 static const uint8_t batery_level_ccc[2] = {0x00, 0x00};
 static uint8_t battery_level = 50;
 
@@ -244,7 +51,7 @@ static const esp_gatts_attr_db_t battery_attribute_table[BAS_IDX_NB] = {
     // Battary Service Declaration
     [BAS_IDX_SVC] = {{ESP_GATT_AUTO_RSP},
                      {ESP_UUID_LEN_16, (uint8_t*)&primary_service_uuid, ESP_GATT_PERM_READ, sizeof(uint16_t),
-                      sizeof(battery_service), (uint8_t*)&battery_service}},
+                      sizeof(battery_service_uuid), (uint8_t*)&battery_service_uuid}},
 
     // Battary level Characteristic Declaration
     [BAS_IDX_BATT_LVL_CHAR] = {{ESP_GATT_AUTO_RSP},
@@ -268,13 +75,11 @@ static const esp_gatts_attr_db_t battery_attribute_table[BAS_IDX_NB] = {
                                     sizeof(struct CharacteristicPresentationInfo), 0, NULL}},
 };
 
-/// Full Hid device Database Description - Used to add attributes into the
-/// database
 static esp_gatts_attr_db_t hidd_attribute_table[HIDD_LE_IDX_NB] = {
     // HID Service Declaration
     [HIDD_LE_IDX_SVC] = {{ESP_GATT_AUTO_RSP},
                          {ESP_UUID_LEN_16, (uint8_t*)&primary_service_uuid, ESP_GATT_PERM_READ_ENCRYPTED,
-                          sizeof(uint16_t), sizeof(hid_le_svc), (uint8_t*)&hid_le_svc}},
+                          sizeof(uint16_t), sizeof(hid_service_uuid), (uint8_t*)&hid_service_uuid}},
 
     // HID Service Declaration
     [HIDD_LE_IDX_INCL_SVC] = {{ESP_GATT_AUTO_RSP},
@@ -289,7 +94,8 @@ static esp_gatts_attr_db_t hidd_attribute_table[HIDD_LE_IDX_NB] = {
     // HID Information Characteristic Value
     [HIDD_LE_IDX_HID_INFO_VAL] = {{ESP_GATT_AUTO_RSP},
                                   {ESP_UUID_LEN_16, (uint8_t*)&hid_info_char_uuid, ESP_GATT_PERM_READ,
-                                   sizeof(HIDInformation), sizeof(hidInfo), (uint8_t*)&hidInfo}},
+                                   sizeof(HIDInformation), sizeof(hid_info_characteristic_value),
+                                   (uint8_t*)&hid_info_characteristic_value}},
 
     // HID Control Point Characteristic Declaration
     [HIDD_LE_IDX_HID_CTNL_PT_CHAR] = {{ESP_GATT_AUTO_RSP},
@@ -484,7 +290,7 @@ void hid_gatts_callback(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_
       break;
     case ESP_GATTS_CONNECT_EVT: {
       HIDCallbackParameters cb_param = {0};
-      ESP_LOGI(HID_LE_PRF_TAG, "HID connection establish, conn_id = %x", param->connect.conn_id);
+      ESP_LOGI(BLEPRF_TAG, "HID connection establish, conn_id = %x", param->connect.conn_id);
 
       memcpy(cb_param.connect.remote_bda, param->connect.remote_bda, sizeof(esp_bd_addr_t));
       cb_param.connect.conn_id = param->connect.conn_id;
@@ -514,7 +320,7 @@ void hid_gatts_callback(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_
           param->add_attr_tab.status == ESP_GATT_OK) {
         incl_svc.start_hdl = param->add_attr_tab.handles[BAS_IDX_SVC];
         incl_svc.end_hdl = incl_svc.start_hdl + BAS_IDX_NB - 1;
-        ESP_LOGI(HID_LE_PRF_TAG,
+        ESP_LOGI(BLEPRF_TAG,
                  "%s(), start added the hid service to the stack database. "
                  "incl_handle = %d",
                  __func__, incl_svc.start_hdl);
@@ -523,7 +329,7 @@ void hid_gatts_callback(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_
 
       if (param->add_attr_tab.num_handle == HIDD_LE_IDX_NB && param->add_attr_tab.status == ESP_GATT_OK) {
         memcpy(hid_engine.hidd_inst.att_tbl, param->add_attr_tab.handles, HIDD_LE_IDX_NB * sizeof(uint16_t));
-        ESP_LOGI(HID_LE_PRF_TAG, "hid svc handle = %x", hid_engine.hidd_inst.att_tbl[HIDD_LE_IDX_SVC]);
+        ESP_LOGI(BLEPRF_TAG, "hid svc handle = %x", hid_engine.hidd_inst.att_tbl[HIDD_LE_IDX_SVC]);
         hid_add_id_tbl();
         esp_ble_gatts_start_service(hid_engine.hidd_inst.att_tbl[HIDD_LE_IDX_SVC]);
       } else {
@@ -578,13 +384,17 @@ static struct GATTSProfileInstance gatts_profile_instance[PROFILE_NUM] = {
         },
 };
 
+#define GATT_HANDLER "GATTS_HANDLER"
 void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t* param) {
-  /* If event is register event, store the gatts_if for each profile */
+  ESP_LOGI(GATT_HANDLER, "Handling GATTS Event : %d, Interface: x%02X", event, gatts_if);
+
   if (event == ESP_GATTS_REG_EVT) {
+    // Store the gatts_if for each profile
+    ESP_LOGI(GATT_HANDLER, "GATTS Register Event");
     if (param->reg.status == ESP_GATT_OK) {
       gatts_profile_instance[PROFILE_APP_IDX].gatts_if = gatts_if;
     } else {
-      ESP_LOGI(HID_LE_PRF_TAG, "Reg app failed, app_id %04x, status %d\n", param->reg.app_id, param->reg.status);
+      ESP_LOGI(GATT_HANDLER, "Reg app failed, app_id %04x, status %d\n", param->reg.app_id, param->reg.status);
       return;
     }
   }
@@ -608,7 +418,7 @@ void hidd_set_attr_value(uint16_t handle, uint16_t val_len, const uint8_t* value
       hidd_inst->att_tbl[HIDD_LE_IDX_REPORT_REP_REF] >= handle) {
     esp_ble_gatts_set_attr_value(handle, val_len, value);
   } else {
-    ESP_LOGE(HID_LE_PRF_TAG, "%s error:Invalid handle value.", __func__);
+    ESP_LOGE(BLEPRF_TAG, "%s error:Invalid handle value.", __func__);
   }
   return;
 }
@@ -619,7 +429,7 @@ void hidd_get_attr_value(uint16_t handle, uint16_t* length, uint8_t** value) {
       hidd_inst->att_tbl[HIDD_LE_IDX_REPORT_REP_REF] >= handle) {
     esp_ble_gatts_get_attr_value(handle, length, (const uint8_t**)value);
   } else {
-    ESP_LOGE(HID_LE_PRF_TAG, "%s error:Invalid handle value.", __func__);
+    ESP_LOGE(BLEPRF_TAG, "%s error:Invalid handle value.", __func__);
   }
 
   return;
@@ -687,4 +497,15 @@ static void hid_add_id_tbl(void) {
 
   // Setup report ID map
   hid_dev_register_reports(HID_NUM_REPORTS, hid_rpt_map);
+}
+
+void hid_device_register_callbacks(HIDEventCallback callbacks) {
+  if (callbacks != NULL)
+    hid_engine.hidd_cb = callbacks;
+  else
+    return;
+
+  esp_ble_gatts_register_callback(gatts_event_handler);
+  esp_ble_gatts_app_register(BATTRAY_APP_ID);
+  esp_ble_gatts_app_register(HIDD_APP_ID);
 }

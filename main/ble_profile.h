@@ -22,8 +22,6 @@
 #include "esp_gatts_api.h"
 #include "uuid_definition.h"
 
-#define HID_LE_PRF_TAG "HID_LE_PRF"
-
 /// Maximal number of HIDS that can be added in the DB
 #ifndef USE_ONE_HIDS_INSTANCE
 #define HIDD_LE_NB_HIDS_INST_MAX (2)
@@ -120,10 +118,25 @@
   (s)[0] &= HID_CC_RPT_VOLUME_BITS;   \
   (s)[0] |= 0x80
 
+#define HI_UINT16(a) (((a) >> 8) & 0xFF)
+#define LO_UINT16(a) ((a)&0xFF)
+#define PROFILE_NUM 1
+#define PROFILE_APP_IDX 0
+#define CHAR_DECLARATION_SIZE (sizeof(uint8_t))
+
 /// Pointer to the connection clean-up function
 #define HIDD_LE_CLEANUP_FNCT (NULL)
 
-enum HIDServiceAttrIndex {
+enum BatteryServiceAttributeIndex {
+  BAS_IDX_SVC,
+  BAS_IDX_BATT_LVL_CHAR,
+  BAS_IDX_BATT_LVL_VAL,
+  BAS_IDX_BATT_LVL_NTF_CFG,
+  BAS_IDX_BATT_LVL_PRES_FMT,
+  BAS_IDX_NB,
+};
+
+enum HIDServiceAttributeIndex {
   HIDD_LE_IDX_SVC,
   HIDD_LE_IDX_INCL_SVC,                      // Included Service
   HIDD_LE_IDX_HID_INFO_CHAR,                 // HID Information
@@ -345,9 +358,6 @@ typedef struct HIDServiceEngine {
   uint8_t inst_id;
 } HIDServiceEngine;
 
-extern HIDServiceEngine hid_engine;
-extern uint8_t hidProtocolMode;
-
 void hidd_clcb_alloc(uint16_t conn_id, esp_bd_addr_t bda);
 
 bool hidd_clcb_dealloc(uint16_t conn_id);
@@ -359,5 +369,8 @@ void hidd_get_attr_value(uint16_t handle, uint16_t* length, uint8_t** value);
 void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t* param);
 
 void hid_dev_register_reports(uint8_t num_reports, HIDReportMapping* p_report);
+
+extern HIDServiceEngine hid_engine;
+extern uint8_t hidProtocolMode;
 
 #endif

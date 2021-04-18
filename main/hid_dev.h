@@ -1,11 +1,11 @@
 #ifndef HID_DEV_H__
 #define HID_DEV_H__
 
+#include "ble_profile.h"
 #include "esp_bt_defs.h"
 #include "esp_err.h"
 #include "esp_gatt_defs.h"
 #include "hid_keydefinition.h"
-#include "hidd_le_prf_int.h"
 
 void hid_dev_register_reports(uint8_t num_reports, HIDReportMapping* p_report);
 

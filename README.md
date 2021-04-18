@@ -1,7 +1,7 @@
 | Supported Targets | ESP32 |
 | ----------------- | ----- |
 
-#Custom BLE Capable HID Macropad
+# Custom BLE Capable HID Macropad
 Code heavily modified from ESP-IDF BLE HID Device Demo
 
 Introduction
