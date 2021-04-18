@@ -304,6 +304,3 @@ static const uint8_t hidReportMap[] = {
     0x81, 0x03,  //   Input (Const, Var, Abs)
     0xC0,        // End Collection
 };
-
-uint8_t hidReportMapLen = sizeof(hidReportMap);
-uint8_t hidProtocolMode = HID_PROTOCOL_MODE_REPORT;

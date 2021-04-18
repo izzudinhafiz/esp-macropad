@@ -75,7 +75,7 @@ rotary_encoder_t* encoder = NULL;
 static uint32_t pcnt_unit = 0;
 QueueHandle_t uart_queue;
 
-void hidd_event_callback(HIDEvent event, HIDCallbackParameters* param);
+void hidd_event_callback(HIDCallbackEvent event, HIDEventParameters* param);
 void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t* param);
 void encoder_task(void* pvParamaters);
 void battery_task(void* pvParamaters);
@@ -226,25 +226,25 @@ void initBT(void) {
   esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
   ret = esp_bt_controller_init(&bt_cfg);
   if (ret) {
-    ESP_LOGE(HID_DEMO_TAG, "%s initialize controller failed\n", __func__);
+    ESP_LOGE(BTCONFIG_TAG, "%s initialize controller failed\n", __func__);
     return;
   }
 
   ret = esp_bt_controller_enable(ESP_BT_MODE_BLE);
   if (ret) {
-    ESP_LOGE(HID_DEMO_TAG, "%s enable controller failed\n", __func__);
+    ESP_LOGE(BTCONFIG_TAG, "%s enable controller failed\n", __func__);
     return;
   }
 
   ret = esp_bluedroid_init();
   if (ret) {
-    ESP_LOGE(HID_DEMO_TAG, "%s init bluedroid failed\n", __func__);
+    ESP_LOGE(BTCONFIG_TAG, "%s init bluedroid failed\n", __func__);
     return;
   }
 
   ret = esp_bluedroid_enable();
   if (ret) {
-    ESP_LOGE(HID_DEMO_TAG, "%s enable bluedroid failed\n", __func__);
+    ESP_LOGE(BTCONFIG_TAG, "%s enable bluedroid failed\n", __func__);
     return;
   }
 }

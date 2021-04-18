@@ -41,6 +41,7 @@ static HIDReportMapping* hid_get_report_by_id(uint8_t id, uint8_t type) {
 }
 
 void hid_dev_register_reports(uint8_t num_reports, HIDReportMapping* p_report) {
+  ESP_LOGI(HIDD_TAG, "Registering report");
   hid_dev_rpt_tbl = p_report;
   hid_dev_rpt_tbl_Len = num_reports;
   return;
@@ -50,10 +51,8 @@ void hid_dev_send_report(esp_gatt_if_t gatts_if, uint16_t conn_id, uint8_t id, u
                          uint8_t* data) {
   HIDReportMapping* report;
   report = hid_get_report_by_id(id, type);
-  // get att handle for report
   if (report != NULL) {
-    // if notifications are enabled
-    ESP_LOGD(HIDD_TAG, "%s(), send the report, handle = %d", __func__, report->handle);
+    // ESP_LOGI(HIDD_TAG, "Sending report %d", report->handle);
     esp_ble_gatts_send_indicate(gatts_if, conn_id, report->handle, length, data, false);
   }
 
@@ -61,6 +60,7 @@ void hid_dev_send_report(esp_gatt_if_t gatts_if, uint16_t conn_id, uint8_t id, u
 }
 
 void hid_consumer_build_report(uint8_t* buffer, consumer_cmd cmd) {
+  ESP_LOGI(HIDD_TAG, "Creating consumer report for command x%02X", cmd);
   if (buffer) {
     switch (cmd) {
       case HID_CONSUMER_CHANNEL_UP:
@@ -134,6 +134,7 @@ void hid_consumer_build_report(uint8_t* buffer, consumer_cmd cmd) {
 }
 
 void hid_send_consumer_value(uint16_t conn_id, uint8_t key_cmd, bool key_pressed) {
+  ESP_LOGI(HIDD_TAG, "Sending consumer value CMD: x%02X Value: x%02X", key_cmd, key_pressed);
   uint8_t buffer[HID_CC_IN_RPT_LEN] = {0, 0};
   if (key_pressed) {
     hid_consumer_build_report(buffer, key_cmd);
@@ -143,6 +144,7 @@ void hid_send_consumer_value(uint16_t conn_id, uint8_t key_cmd, bool key_pressed
 }
 
 void hid_send_keyboard_value(uint16_t conn_id, key_mask special_key_mask, keyboard_cmd* keyboard_cmd, uint8_t num_key) {
+  ESP_LOGV(HIDD_TAG, "Sending keyboard value");
   if (num_key > HID_KEYBOARD_IN_RPT_LEN - 2) {
     ESP_LOGE(HIDD_TAG, "%s(), the number key should not be more than %d", __func__, HID_KEYBOARD_IN_RPT_LEN);
     return;
@@ -164,6 +166,7 @@ void hid_send_keyboard_value(uint16_t conn_id, key_mask special_key_mask, keyboa
 }
 
 void hid_device_profile_init(void) {
+  ESP_LOGI(HIDD_TAG, "Initializing HID Device Profile");
   if (hid_engine.enabled) return;
 
   // Reset the hid device target environment
@@ -172,15 +175,19 @@ void hid_device_profile_init(void) {
 }
 
 void hid_device_profile_deinit(void) {
+  ESP_LOGI(HIDD_TAG, "Deinitializing HID Device Profile");
   uint16_t hidd_svc_hdl = hid_engine.hidd_inst.att_tbl[HIDD_LE_IDX_SVC];
   if (!hid_engine.enabled) return;
 
   if (hidd_svc_hdl != 0) {
+    ESP_LOGI(HIDD_TAG, "Stopping service");
     esp_ble_gatts_stop_service(hidd_svc_hdl);
+    ESP_LOGI(HIDD_TAG, "Deleting service");
     esp_ble_gatts_delete_service(hidd_svc_hdl);
   } else
     return;
 
+  ESP_LOGI(HIDD_TAG, "Unregistering interface");
   /* unregister the HID device profile to the BTA_GATTS module*/
   esp_ble_gatts_app_unregister(hid_engine.gatt_if);
 }

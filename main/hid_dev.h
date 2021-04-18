@@ -20,7 +20,7 @@ void hid_send_consumer_value(uint16_t conn_id, uint8_t key_cmd, bool key_pressed
 
 void hid_send_keyboard_value(uint16_t conn_id, key_mask special_key_mask, keyboard_cmd* keyboard_cmd, uint8_t num_key);
 
-void hid_device_register_callbacks(HIDEventCallback callbacks);
+void hid_device_register_callbacks(HIDCallback callbacks);
 
 void hid_device_profile_init(void);
 

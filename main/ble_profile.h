@@ -231,15 +231,6 @@ typedef uint8_t keyboard_cmd;
 
 typedef uint8_t consumer_cmd;
 
-typedef enum HIDEvent {
-  ESP_HIDD_EVENT_REG_FINISH = 0,
-  ESP_BAT_EVENT_REG,
-  ESP_HIDD_EVENT_DEINIT_FINISH,
-  ESP_HIDD_EVENT_BLE_CONNECT,
-  ESP_HIDD_EVENT_BLE_DISCONNECT,
-  ESP_HIDD_EVENT_BLE_VENDOR_REPORT_WRITE_EVT,
-} HIDEvent;
-
 typedef enum HIDConnectionStatus {
   ESP_HIDD_STA_CONN_SUCCESS = 0x00,
   ESP_HIDD_STA_CONN_FAIL = 0x01,
@@ -255,7 +246,16 @@ typedef enum HIDDeInitStatus {
   ESP_HIDD_DEINIT_FAILED = 0,
 } HIDDeInitStatus;
 
-typedef union HIDCallbackParameters {
+typedef enum HIDCallbackEvent {
+  ESP_HIDD_EVENT_REG_FINISH = 0,
+  ESP_BAT_EVENT_REG,
+  ESP_HIDD_EVENT_DEINIT_FINISH,
+  ESP_HIDD_EVENT_BLE_CONNECT,
+  ESP_HIDD_EVENT_BLE_DISCONNECT,
+  ESP_HIDD_EVENT_BLE_VENDOR_REPORT_WRITE_EVT,
+} HIDCallbackEvent;
+
+typedef union HIDEventParameters {
   struct HIDInitFinishEvent {
     // ESP_HIDD_EVENT_INIT_FINISH
     HIDInitStatus state;
@@ -286,9 +286,9 @@ typedef union HIDCallbackParameters {
     uint8_t* data;
   } vendor_write;
 
-} HIDCallbackParameters;
+} HIDEventParameters;
 
-typedef void (*HIDEventCallback)(HIDEvent event, HIDCallbackParameters* param);
+typedef void (*HIDCallback)(HIDCallbackEvent event, HIDEventParameters* param);
 
 typedef struct HIDReportMapping {
   uint16_t handle;      // Handle of report characteristic
@@ -354,9 +354,12 @@ typedef struct HIDServiceEngine {
   bool is_take;
   bool is_primery;
   HIDInstance hidd_inst;
-  HIDEventCallback hidd_cb;
+  HIDCallback hidd_cb;
   uint8_t inst_id;
 } HIDServiceEngine;
+
+extern HIDServiceEngine hid_engine;
+extern uint8_t hidProtocolMode;
 
 void hidd_clcb_alloc(uint16_t conn_id, esp_bd_addr_t bda);
 
@@ -368,9 +371,8 @@ void hidd_get_attr_value(uint16_t handle, uint16_t* length, uint8_t** value);
 
 void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t* param);
 
-void hid_dev_register_reports(uint8_t num_reports, HIDReportMapping* p_report);
+void gatts_event_callback(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t* param);
 
-extern HIDServiceEngine hid_engine;
-extern uint8_t hidProtocolMode;
+void hid_dev_register_reports(uint8_t num_reports, HIDReportMapping* p_report);
 
 #endif

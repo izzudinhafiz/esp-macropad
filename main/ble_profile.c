@@ -6,6 +6,12 @@
 #include "hid_keydefinition.h"
 
 #define BLEPRF_TAG "BLE_PROFILE"
+#define GATTHANDLER_TAG "GATTS_HANDLER"
+#define GATTCB_TAG "GATTS_CALLBACK"
+
+uint8_t hidReportMapLen = sizeof(hidReportMap);
+uint8_t hidProtocolMode = HID_PROTOCOL_MODE_REPORT;
+
 struct CharacteristicPresentationInfo {
   uint16_t unit;  // Unit (The Unit is a UUID)
   uint16_t description;
@@ -259,92 +265,8 @@ static esp_gatts_attr_db_t hidd_attribute_table[HIDD_LE_IDX_NB] = {
 
 static void hid_add_id_tbl(void);
 
-void hid_gatts_callback(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t* param) {
-  switch (event) {
-    case ESP_GATTS_REG_EVT: {
-      esp_ble_gap_config_local_icon(ESP_BLE_APPEARANCE_GENERIC_HID);
-      HIDCallbackParameters hidd_param;
-      hidd_param.init_finish.state = param->reg.status;
-
-      if (param->reg.app_id == HIDD_APP_ID) {
-        hid_engine.gatt_if = gatts_if;
-        if (hid_engine.hidd_cb != NULL) {
-          (hid_engine.hidd_cb)(ESP_HIDD_EVENT_REG_FINISH, &hidd_param);
-          esp_ble_gatts_create_attr_tab(battery_attribute_table, hid_engine.gatt_if, BAS_IDX_NB, 0);
-        }
-      }
-
-      if (param->reg.app_id == BATTRAY_APP_ID) {
-        hidd_param.init_finish.gatts_if = gatts_if;
-        if (hid_engine.hidd_cb != NULL) {
-          (hid_engine.hidd_cb)(ESP_BAT_EVENT_REG, &hidd_param);
-        }
-      }
-
-      break;
-    }
-    case ESP_GATTS_CONF_EVT: {
-      break;
-    }
-    case ESP_GATTS_CREATE_EVT:
-      break;
-    case ESP_GATTS_CONNECT_EVT: {
-      HIDCallbackParameters cb_param = {0};
-      ESP_LOGI(BLEPRF_TAG, "HID connection establish, conn_id = %x", param->connect.conn_id);
-
-      memcpy(cb_param.connect.remote_bda, param->connect.remote_bda, sizeof(esp_bd_addr_t));
-      cb_param.connect.conn_id = param->connect.conn_id;
-      hidd_clcb_alloc(param->connect.conn_id, param->connect.remote_bda);
-      esp_ble_set_encryption(param->connect.remote_bda, ESP_BLE_SEC_ENCRYPT_NO_MITM);
-
-      if (hid_engine.hidd_cb != NULL) {
-        (hid_engine.hidd_cb)(ESP_HIDD_EVENT_BLE_CONNECT, &cb_param);
-      }
-      break;
-    }
-    case ESP_GATTS_DISCONNECT_EVT: {
-      if (hid_engine.hidd_cb != NULL) {
-        (hid_engine.hidd_cb)(ESP_HIDD_EVENT_BLE_DISCONNECT, NULL);
-      }
-      hidd_clcb_dealloc(param->disconnect.conn_id);
-      break;
-    }
-    case ESP_GATTS_CLOSE_EVT:
-      break;
-    case ESP_GATTS_WRITE_EVT: {
-      break;
-    }
-    case ESP_GATTS_CREAT_ATTR_TAB_EVT: {
-      if (param->add_attr_tab.num_handle == BAS_IDX_NB &&
-          param->add_attr_tab.svc_uuid.uuid.uuid16 == ESP_GATT_UUID_BATTERY_SERVICE_SVC &&
-          param->add_attr_tab.status == ESP_GATT_OK) {
-        incl_svc.start_hdl = param->add_attr_tab.handles[BAS_IDX_SVC];
-        incl_svc.end_hdl = incl_svc.start_hdl + BAS_IDX_NB - 1;
-        ESP_LOGI(BLEPRF_TAG,
-                 "%s(), start added the hid service to the stack database. "
-                 "incl_handle = %d",
-                 __func__, incl_svc.start_hdl);
-        esp_ble_gatts_create_attr_tab(hidd_attribute_table, gatts_if, HIDD_LE_IDX_NB, 0);
-      }
-
-      if (param->add_attr_tab.num_handle == HIDD_LE_IDX_NB && param->add_attr_tab.status == ESP_GATT_OK) {
-        memcpy(hid_engine.hidd_inst.att_tbl, param->add_attr_tab.handles, HIDD_LE_IDX_NB * sizeof(uint16_t));
-        ESP_LOGI(BLEPRF_TAG, "hid svc handle = %x", hid_engine.hidd_inst.att_tbl[HIDD_LE_IDX_SVC]);
-        hid_add_id_tbl();
-        esp_ble_gatts_start_service(hid_engine.hidd_inst.att_tbl[HIDD_LE_IDX_SVC]);
-      } else {
-        esp_ble_gatts_start_service(param->add_attr_tab.handles[0]);
-      }
-      break;
-    }
-
-    default:
-      break;
-  }
-}
-
 void hidd_le_init(void) {
-  // Reset the hid device target environment
+  ESP_LOGI(BLEPRF_TAG, "Init HID Engine");
   memset(&hid_engine, 0, sizeof(HIDServiceEngine));
 }
 
@@ -379,22 +301,23 @@ bool hidd_clcb_dealloc(uint16_t conn_id) {
 static struct GATTSProfileInstance gatts_profile_instance[PROFILE_NUM] = {
     [PROFILE_APP_IDX] =
         {
-            .gatts_cb = hid_gatts_callback,
+            .gatts_cb = gatts_event_callback,
             .gatts_if = ESP_GATT_IF_NONE, /* Not get the gatt_if, so initial is ESP_GATT_IF_NONE */
         },
 };
 
-#define GATT_HANDLER "GATTS_HANDLER"
+// Register GATTS interface for the current profile and
+// calls the current profile callback to handle the GATT event
 void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t* param) {
-  ESP_LOGI(GATT_HANDLER, "Handling GATTS Event : %d, Interface: x%02X", event, gatts_if);
+  // ESP_LOGI(GATTHANDLER_TAG, "Handling GATTS Event : %d, Interface: x%02X", event, gatts_if);
 
   if (event == ESP_GATTS_REG_EVT) {
     // Store the gatts_if for each profile
-    ESP_LOGI(GATT_HANDLER, "GATTS Register Event");
+    ESP_LOGI(GATTHANDLER_TAG, "GATTS Register Event");
     if (param->reg.status == ESP_GATT_OK) {
       gatts_profile_instance[PROFILE_APP_IDX].gatts_if = gatts_if;
     } else {
-      ESP_LOGI(GATT_HANDLER, "Reg app failed, app_id %04x, status %d\n", param->reg.app_id, param->reg.status);
+      ESP_LOGI(GATTHANDLER_TAG, "Reg app failed, app_id %04x, status %d\n", param->reg.app_id, param->reg.status);
       return;
     }
   }
@@ -412,7 +335,120 @@ void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp
   } while (0);
 }
 
+void gatts_event_callback(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t* param) {
+  switch (event) {
+    case ESP_GATTS_REG_EVT: {
+      ESP_LOGI(GATTCB_TAG, "GATTS Registration Event");
+      ESP_LOGI(GATTCB_TAG, "Set appearance to GENERIC HID");
+      esp_ble_gap_config_local_icon(ESP_BLE_APPEARANCE_GENERIC_HID);
+      HIDEventParameters hidd_param;
+      hidd_param.init_finish.state = param->reg.status;
+
+      ESP_LOGI(GATTCB_TAG, "Got APP_ID x%04X", param->reg.app_id);
+      if (param->reg.app_id == HIDD_APP_ID) {
+        ESP_LOGI(GATTCB_TAG, "APP_ID is for HIDD_APP_ID, attaching GATT Interface to HID Engine");
+        hid_engine.gatt_if = gatts_if;
+        if (hid_engine.hidd_cb != NULL) {
+          ESP_LOGI(GATTCB_TAG, "Raising HIDD_EVENT_REG_FINISH event for HID Engine");
+          (hid_engine.hidd_cb)(ESP_HIDD_EVENT_REG_FINISH, &hidd_param);
+          ESP_LOGI(GATTCB_TAG, "Creating Battery Attribute Table");
+          esp_ble_gatts_create_attr_tab(battery_attribute_table, hid_engine.gatt_if, BAS_IDX_NB, 0);
+        }
+      }
+
+      if (param->reg.app_id == BATTRAY_APP_ID) {
+        ESP_LOGI(GATTCB_TAG, "APP_ID is for BATTRAY_APP_ID, attaching GATT Interface to HIDEngine.init_finish");
+        hidd_param.init_finish.gatts_if = gatts_if;
+        if (hid_engine.hidd_cb != NULL) {
+          ESP_LOGI(GATTCB_TAG, "Raising ESP_BAT_EVENT_REG event for HID Engine");
+          (hid_engine.hidd_cb)(ESP_BAT_EVENT_REG, &hidd_param);
+        }
+      }
+      break;
+    }
+    case ESP_GATTS_CONF_EVT: {
+      // ESP_LOGI(GATTCB_TAG, "GATTS Confirmation Event");
+      break;
+    }
+    case ESP_GATTS_CREATE_EVT:
+      ESP_LOGI(GATTCB_TAG, "GATTS Create Event");
+      break;
+    case ESP_GATTS_CONNECT_EVT: {
+      ESP_LOGI(GATTCB_TAG, "GATTS Connection Event");
+      HIDEventParameters cb_param = {0};
+      ESP_LOGI(GATTCB_TAG, "HID connection establish, conn_id = %x", param->connect.conn_id);
+
+      memcpy(cb_param.connect.remote_bda, param->connect.remote_bda, sizeof(esp_bd_addr_t));
+      cb_param.connect.conn_id = param->connect.conn_id;
+      ESP_LOGI(GATTCB_TAG, "Allocating connection link");
+      hidd_clcb_alloc(param->connect.conn_id, param->connect.remote_bda);
+      ESP_LOGI(GATTCB_TAG, "Setting Encryption to ESP_BLE_SEC_ENCRPYT_NO_MITM");
+      esp_ble_set_encryption(param->connect.remote_bda, ESP_BLE_SEC_ENCRYPT_NO_MITM);
+
+      if (hid_engine.hidd_cb != NULL) {
+        ESP_LOGI(GATTCB_TAG, "Raising ESP_HIDD_EVENT_BLE_CONNECT event for HID Engine");
+        (hid_engine.hidd_cb)(ESP_HIDD_EVENT_BLE_CONNECT, &cb_param);
+      }
+      break;
+    }
+    case ESP_GATTS_DISCONNECT_EVT: {
+      ESP_LOGI(GATTCB_TAG, "GATTS Disconnect Event");
+      if (hid_engine.hidd_cb != NULL) {
+        ESP_LOGI(GATTCB_TAG, "Raising ESP_HIDD_EVENT_BLE_DISCONNECT event for HID Engine");
+        (hid_engine.hidd_cb)(ESP_HIDD_EVENT_BLE_DISCONNECT, NULL);
+      }
+      ESP_LOGI(GATTCB_TAG, "Deallocating connection link");
+      hidd_clcb_dealloc(param->disconnect.conn_id);
+      break;
+    }
+    case ESP_GATTS_CLOSE_EVT:
+      ESP_LOGI(GATTCB_TAG, "GATTS Close Event");
+      break;
+    case ESP_GATTS_WRITE_EVT: {
+      ESP_LOGI(GATTCB_TAG, "GATTS Write Event");
+      break;
+    }
+    case ESP_GATTS_CREAT_ATTR_TAB_EVT: {
+      ESP_LOGI(GATTCB_TAG, "GATTS Create Attribute Table Event for UUID x%04X",
+               param->add_attr_tab.svc_uuid.uuid.uuid16);
+
+      if (param->add_attr_tab.num_handle == BAS_IDX_NB &&
+          param->add_attr_tab.svc_uuid.uuid.uuid16 == ESP_GATT_UUID_BATTERY_SERVICE_SVC &&
+          param->add_attr_tab.status == ESP_GATT_OK) {
+        ESP_LOGI(GATTCB_TAG, "UUID for BATTERY Service");
+        incl_svc.start_hdl = param->add_attr_tab.handles[BAS_IDX_SVC];
+        incl_svc.end_hdl = incl_svc.start_hdl + BAS_IDX_NB - 1;
+        ESP_LOGI(GATTCB_TAG, "BATTERY Service Handle Start: x%04X End: x%04X", incl_svc.start_hdl, incl_svc.end_hdl);
+
+        ESP_LOGI(GATTCB_TAG, "Creating attribute table for HID Device");
+        esp_ble_gatts_create_attr_tab(hidd_attribute_table, gatts_if, HIDD_LE_IDX_NB, 0);
+      }
+
+      if (param->add_attr_tab.num_handle == HIDD_LE_IDX_NB && param->add_attr_tab.status == ESP_GATT_OK) {
+        ESP_LOGI(GATTCB_TAG, "UUID for HID Device Service with add_attr_tab.status of ESP_GATT_OK");
+        memcpy(hid_engine.hidd_inst.att_tbl, param->add_attr_tab.handles, HIDD_LE_IDX_NB * sizeof(uint16_t));
+        ESP_LOGI(GATTCB_TAG, "HID Device Service Handle Start: x%04X End: x%04X",
+                 hid_engine.hidd_inst.att_tbl[HIDD_LE_IDX_SVC],
+                 hid_engine.hidd_inst.att_tbl[HIDD_LE_IDX_SVC] + HIDD_LE_IDX_NB - 1);
+        hid_add_id_tbl();
+        ESP_LOGI(GATTCB_TAG, "GATT Starting Service for handle x%04X ", hid_engine.hidd_inst.att_tbl[HIDD_LE_IDX_SVC]);
+        esp_ble_gatts_start_service(hid_engine.hidd_inst.att_tbl[HIDD_LE_IDX_SVC]);
+      } else {
+        ESP_LOGI(GATTCB_TAG, "UUID for HID Device Service");
+        ESP_LOGI(GATTCB_TAG, "GATT Starting Service for handle x%04X ", param->add_attr_tab.handles[0]);
+        esp_ble_gatts_start_service(param->add_attr_tab.handles[0]);
+      }
+      break;
+    }
+
+    default:
+      ESP_LOGI(GATTCB_TAG, "GATTS Event %d unmanaged", event);
+      break;
+  }
+}
+
 void hidd_set_attr_value(uint16_t handle, uint16_t val_len, const uint8_t* value) {
+  ESP_LOGI(BLEPRF_TAG, "HID Device setting attribute");
   HIDInstance* hidd_inst = &hid_engine.hidd_inst;
   if (hidd_inst->att_tbl[HIDD_LE_IDX_HID_INFO_VAL] <= handle &&
       hidd_inst->att_tbl[HIDD_LE_IDX_REPORT_REP_REF] >= handle) {
@@ -424,6 +460,7 @@ void hidd_set_attr_value(uint16_t handle, uint16_t val_len, const uint8_t* value
 }
 
 void hidd_get_attr_value(uint16_t handle, uint16_t* length, uint8_t** value) {
+  ESP_LOGI(BLEPRF_TAG, "HID Device getting attribute");
   HIDInstance* hidd_inst = &hid_engine.hidd_inst;
   if (hidd_inst->att_tbl[HIDD_LE_IDX_HID_INFO_VAL] <= handle &&
       hidd_inst->att_tbl[HIDD_LE_IDX_REPORT_REP_REF] >= handle) {
@@ -499,13 +536,15 @@ static void hid_add_id_tbl(void) {
   hid_dev_register_reports(HID_NUM_REPORTS, hid_rpt_map);
 }
 
-void hid_device_register_callbacks(HIDEventCallback callbacks) {
+void hid_device_register_callbacks(HIDCallback callbacks) {
   if (callbacks != NULL)
     hid_engine.hidd_cb = callbacks;
   else
     return;
-
+  ESP_LOGI(BLEPRF_TAG, "Registering GATTS Event Handler");
   esp_ble_gatts_register_callback(gatts_event_handler);
+  ESP_LOGI(BLEPRF_TAG, "Registering GATTS Application: BATTRAY");
   esp_ble_gatts_app_register(BATTRAY_APP_ID);
+  ESP_LOGI(BLEPRF_TAG, "Registering GATTS Application: HID Device");
   esp_ble_gatts_app_register(HIDD_APP_ID);
 }

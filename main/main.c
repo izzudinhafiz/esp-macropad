@@ -11,11 +11,11 @@ void app_main(void) {
   }
   ESP_ERROR_CHECK(ret);
 
-  initBT();   // Sets BT controller
-  initHID();  // Register HID + GAP protocol callbacks
-
   hardwareInit();  // Sets hardware GPIO
   initUart();      // Configure UART task
+
+  initBT();   // Sets BT controller
+  initHID();  // Register HID + GAP protocol callbacks
   xTaskCreate(&uart_event_task, "uart_event_task", 2048, NULL, 12, NULL);
   xTaskCreate(&keyboard_task, "keyboard_task", 2048, NULL, 5, NULL);
   xTaskCreate(&encoder_task, "encoder_task", 2048, NULL, 5, NULL);
@@ -28,13 +28,17 @@ void encoder_task(void* pvParamaters) {
   uint8_t counter_difference = 0;
   uint16_t current_counter;
   while (1) {
-    txInterMcu(ROT_SW_UPDATE, gpio_get_level(PIN_ROT_SW));
+    if (CONFIG_LOG_DEFAULT_LEVEL == 0) {
+      txInterMcu(ROT_SW_UPDATE, gpio_get_level(PIN_ROT_SW));
+    }
     current_counter = encoder->get_counter_value(encoder);
     // ESP_LOGI(TAG, "Encoder value: %d", current_counter);
     if (current_counter == last_counter) {
       last_counter = current_counter;
       counter_difference = 0;
-      txInterMcu(ROT_POS_POSITIVE, counter_difference);
+      if (CONFIG_LOG_DEFAULT_LEVEL == 0) {
+        txInterMcu(ROT_POS_POSITIVE, counter_difference);
+      }
       if (vol_mode != VOL_NONE) {
         if (vol_mode == VOL_UP) {
           // release volup
@@ -50,7 +54,9 @@ void encoder_task(void* pvParamaters) {
     } else if (current_counter > last_counter) {
       counter_difference = current_counter - last_counter;
       last_counter = current_counter;
-      txInterMcu(ROT_POS_POSITIVE, counter_difference);
+      if (CONFIG_LOG_DEFAULT_LEVEL == 0) {
+        txInterMcu(ROT_POS_POSITIVE, counter_difference);
+      }
       // increase volume
       if (vol_mode != VOL_UP) {
         if (vol_mode == VOL_NONE) {
@@ -70,7 +76,9 @@ void encoder_task(void* pvParamaters) {
     } else {
       counter_difference = last_counter - current_counter;
       last_counter = current_counter;
-      txInterMcu(ROT_POS_NEGATIVE, counter_difference);
+      if (CONFIG_LOG_DEFAULT_LEVEL == 0) {
+        txInterMcu(ROT_POS_NEGATIVE, counter_difference);
+      }
       // decrease volume
       if (vol_mode != VOL_DOWN) {
         if (vol_mode == VOL_NONE) {
@@ -87,8 +95,6 @@ void encoder_task(void* pvParamaters) {
     }
     if (counter_difference < 10) {
       counter_difference = 10;
-    } else {
-      ESP_LOGI(TAG, "Counter Difference: %d", counter_difference);
     }
 
     vTaskDelay(pdMS_TO_TICKS(counter_difference));
@@ -99,14 +105,17 @@ void battery_task(void* pvParameters) {
   uint8_t scaledBatteryVoltage = 0;
   while (1) {
     if (gpio_get_level(PIN_5VDET)) {
-      ESP_LOGI(TAG, "5V Present");
+      ESP_LOGV(TAG, "5V Present");
     } else {
-      ESP_LOGI(TAG, "5V Not Present");
+      ESP_LOGV(TAG, "5V Not Present");
     }
 
-    ESP_LOGI(TAG, "Battery value: %f", getBatteryVoltage());
+    ESP_LOGV(TAG, "Battery value: %f", getBatteryVoltage());
     scaledBatteryVoltage = ((int)(getBatteryVoltage() * 100)) / 2;
-    txInterMcu(BATT_UPDATE, scaledBatteryVoltage);
+    if (CONFIG_LOG_DEFAULT_LEVEL == 0) {
+      txInterMcu(BATT_UPDATE, scaledBatteryVoltage);
+    }
+
     vTaskDelay(pdMS_TO_TICKS(1000));
   }
 }
@@ -115,57 +124,57 @@ void keyboard_task(void* pvParameters) {
   uint16_t buttonStatus;
   uint8_t numKeysPressed;
   while (1) {
-    ESP_LOGI(HID_DEMO_TAG, "Secure Connection is: x%02X", sec_conn);
+    ESP_LOGV(BTCONFIG_TAG, "Secure Connection is: x%02X", sec_conn);
     if (sec_conn && (current_kb_mode == KB_BT)) {
       keyboard_cmd key_values[10];
       numKeysPressed = 0;
 
       buttonStatus = scanButtons();
       if (buttonStatus & (1 << 1)) {
-        ESP_LOGI(HID_DEMO_TAG, "Button 1 Pressed");
+        ESP_LOGI(BTCONFIG_TAG, "Button 1 Pressed");
         key_values[numKeysPressed++] = HID_KEY_1;
       }
       if (buttonStatus & (1 << 2)) {
-        ESP_LOGI(HID_DEMO_TAG, "Button 2 Pressed");
+        ESP_LOGI(BTCONFIG_TAG, "Button 2 Pressed");
         key_values[numKeysPressed++] = HID_KEY_2;
       }
       if (buttonStatus & (1 << 3)) {
-        ESP_LOGI(HID_DEMO_TAG, "Button 3 Pressed");
+        ESP_LOGI(BTCONFIG_TAG, "Button 3 Pressed");
         key_values[numKeysPressed++] = HID_KEY_3;
       }
       if (buttonStatus & (1 << 4)) {
-        ESP_LOGI(HID_DEMO_TAG, "Button 4 Pressed");
+        ESP_LOGI(BTCONFIG_TAG, "Button 4 Pressed");
         key_values[numKeysPressed++] = HID_KEY_4;
       }
       if (buttonStatus & (1 << 5)) {
-        ESP_LOGI(HID_DEMO_TAG, "Button 5 Pressed");
+        ESP_LOGI(BTCONFIG_TAG, "Button 5 Pressed");
         key_values[numKeysPressed++] = HID_KEY_5;
       }
       if (buttonStatus & (1 << 6)) {
-        ESP_LOGI(HID_DEMO_TAG, "Button 6 Pressed");
+        ESP_LOGI(BTCONFIG_TAG, "Button 6 Pressed");
         key_values[numKeysPressed++] = HID_KEY_6;
       }
       if (buttonStatus & (1 << 7)) {
-        ESP_LOGI(HID_DEMO_TAG, "Button 7 Pressed");
+        ESP_LOGI(BTCONFIG_TAG, "Button 7 Pressed");
         key_values[numKeysPressed++] = HID_KEY_7;
       }
       if (buttonStatus & (1 << 8)) {
-        ESP_LOGI(HID_DEMO_TAG, "Button 8 Pressed");
+        ESP_LOGI(BTCONFIG_TAG, "Button 8 Pressed");
         key_values[numKeysPressed++] = HID_KEY_8;
       }
       if (buttonStatus & (1 << 9)) {
-        ESP_LOGI(HID_DEMO_TAG, "Button 9 Pressed");
+        ESP_LOGI(BTCONFIG_TAG, "Button 9 Pressed");
         key_values[numKeysPressed++] = HID_KEY_9;
       }
       if (buttonStatus & (1 << 10)) {
         if (!(buttonToggleMask & (1 << 10))) {
-          ESP_LOGI(HID_DEMO_TAG, "Button 10 Pressed");
+          ESP_LOGI(BTCONFIG_TAG, "Button 10 Pressed");
           hid_send_consumer_value(hid_conn_id, HID_CONSUMER_MUTE, true);
           buttonToggleMask |= (1 << 10);
         }
       } else {
         if ((buttonToggleMask & (1 << 10))) {
-          ESP_LOGI(HID_DEMO_TAG, "Button 10 Unpressed");
+          ESP_LOGI(BTCONFIG_TAG, "Button 10 Unpressed");
           hid_send_consumer_value(hid_conn_id, HID_CONSUMER_MUTE, false);
           buttonToggleMask &= ~(1 << 10);
         }
@@ -191,6 +200,7 @@ void kbmode_task(void* pvParamaters) {
   while (1) {
     if (current_kb_mode != keyboard_mode) {
       if (keyboard_mode == KB_BT) {
+        ESP_LOGI(TAG, "Changing KB MODE to Bluetooth");
         gpio_config_t col_config;
         col_config.intr_type = GPIO_INTR_DISABLE;
         col_config.mode = GPIO_MODE_OUTPUT;
@@ -202,6 +212,7 @@ void kbmode_task(void* pvParamaters) {
       }
 
       if (keyboard_mode == KB_USB) {
+        ESP_LOGI(TAG, "Changing KB MODE to USB");
         gpio_config_t col_config;
         col_config.intr_type = GPIO_INTR_DISABLE;
         col_config.mode = GPIO_MODE_INPUT;
